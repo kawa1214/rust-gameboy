@@ -100,6 +100,7 @@ pub struct Rom {
     pub mask_rom_version_number: u8,
     pub header_checksum: u8,
     pub global_checksum: [u8; GLOBAL_CHECKSUM_LEN as usize],
+    pub value: Vec<u8>,
 }
 
 impl fmt::Debug for Rom {
@@ -133,13 +134,14 @@ impl Default for Rom {
             new_licensee_code: [0; NEW_LICENSEE_CODE_LEN as usize],
             sgb_flag: false,
             cartridge_type: CartridgeType::RomOnly,
-            rom_size: 0,
-            ram_size: 0,
+            rom_size: Default::default(),
+            ram_size: Default::default(),
             destination_code: DestinationCode::Japanese,
             old_licensee_code: 0,
             mask_rom_version_number: 0,
             header_checksum: 0,
             global_checksum: [0; GLOBAL_CHECKSUM_LEN as usize],
+            value: Vec::new(),
         }
     }
 }
@@ -308,14 +310,14 @@ impl Rom {
             );
         }
 
-        let mut rom_bytes = Vec::new();
         reader.seek(SeekFrom::Start(0)).unwrap();
-        reader.read_to_end(&mut rom_bytes).unwrap();
-        if rom.rom_size != rom_bytes.len() {
+        reader.read_to_end(&mut rom.value).unwrap();
+
+        if rom.rom_size != rom.value.len() {
             panic!(
                 "invalid rom size expected: {}, actual: {}",
                 rom.rom_size,
-                rom_bytes.len(),
+                rom.value.len(),
             );
         }
 
