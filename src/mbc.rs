@@ -1,5 +1,7 @@
 use crate::rom::{CartridgeType, Rom};
-const KB: usize = 1024;
+
+// TODO: move to defines
+pub const KB: usize = 1024;
 
 /// mbc(memory bank controller)
 /// <https://gbdev.io/pandocs/MBCs.html>
@@ -11,13 +13,11 @@ pub trait Mbc {
 }
 
 pub fn new_mbc(rom: Rom) -> Box<dyn Mbc> {
-    let mbc = match rom.cartridge_type {
-        CartridgeType::Mbc1 => Box::new(Mbc1::new(rom)) as Box<dyn Mbc>,
-        CartridgeType::RomOnly => Box::new(RomOnly::new(rom)) as Box<dyn Mbc>,
-        _ => unimplemented!(),
-    };
-
-    return mbc;
+    match rom.cartridge_type {
+        CartridgeType::RomOnly => Box::new(RomOnly::new(rom)),
+        CartridgeType::Mbc1 => Box::new(Mbc1::new(rom)),
+        t => unimplemented!("unimplemented mbc: {:?}", t),
+    }
 }
 
 /// The ROM is directly mapped to memory at $0000-7FFF
@@ -72,9 +72,17 @@ impl Mbc1 {
 
 impl Mbc for Mbc1 {
     fn read(&self, addr: u16) -> u8 {
-        return 1;
+        if addr <= 0xBFFF {
+            return self.rom.value[addr as usize];
+        } else if addr > 0xBFFF {
+            panic!("RomOnly::read: invalid address: 0x{:04X}", addr);
+        } else {
+            panic!("RomOnly::read: invalid address: 0x{:04X}", addr);
+        }
     }
+
+    #[allow(unused_variables)]
     fn write(&mut self, addr: u16, val: u8) -> () {
-        return;
+        panic!("RomOnly::write invalid");
     }
 }

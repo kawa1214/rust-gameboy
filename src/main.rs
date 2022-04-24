@@ -2,7 +2,10 @@ use gb::gb::Gb;
 use std::fs;
 
 fn main() {
-    Gb::new("test_roms/cpu_instrs.gb");
+    let mut gb = Gb::new("test_roms/cpu_instrs.gb");
+    for _ in 0..5 {
+        gb.step();
+    }
 }
 
 #[allow(dead_code)]
