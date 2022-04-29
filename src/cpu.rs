@@ -43,7 +43,7 @@ enum Rp2 {
     Af = 3,
 }
 
-#[derive(FromPrimitive)]
+#[derive(FromPrimitive, Copy, Clone)]
 enum R {
     B = 0,
     C = 1,
@@ -104,23 +104,23 @@ impl Registers {
         self.de = de;
     }
 
-    pub fn set_hl(&mut self, hl: u16) {
-        //self.bus.write(self.hl, val);
-        self.hl = hl;
+    pub fn set_hl(&mut self, val: u16) {
+        self.hl = val;
     }
 
     fn get_a(&mut self) -> u8 {
         self.a
     }
 
-    fn get_r(&self, r: R) -> u8 {
+    // TODO: busを外す
+    fn get_r(&self, bus: &Bus, r: R) -> u8 {
         match r {
             R::B => self.get_b(),
             R::C => self.get_c(),
             R::D => self.get_d(),
             R::E => self.get_e(),
             R::H => self.get_h(),
-            R::Hl => self.get_hl(),
+            R::Hl => self.get_hl(bus),
             R::L => self.get_l(),
             R::A => self.a,
         }
@@ -146,10 +146,8 @@ impl Registers {
         ((self.hl & 0xFF00) >> 8) as u8
     }
 
-    fn get_hl(&self) -> u8 {
-        let test = 123;
-        // self.bus.read(self.hl)
-        test
+    fn get_hl(&self, bus: &Bus) -> u8 {
+        bus.read_byte(self.hl)
     }
 
     fn get_l(&self) -> u8 {
@@ -538,24 +536,37 @@ impl Cpu {
     }
 
     fn call_prefixed_operation(&mut self, opcode: u8) {
+        // TODO: 共通化できる
         let x = opcode >> 6;
         let y = opcode << 2 >> 5;
         let z = opcode << 5 >> 5;
-        let p = y >> 1;
-        let q = y << 2 >> 4;
 
         match x {
             0 => {
-                //rot
+                let rot = Rot::from_u8(y).unwrap();
+                let r = R::from_u8(z).unwrap();
+                match rot {
+                    Rot::Rlc => self.rlc_r(r),
+                    Rot::Rrc => self.rrc_r(r),
+                    Rot::Rl => self.rl_r(r),
+                    Rot::Rr => self.rr_r(r),
+                    Rot::Sla => self.sla_r(r),
+                    Rot::Sra => self.sra_r(r),
+                    Rot::Swap => self.swap_r(r),
+                    Rot::Srl => self.srl_r(r),
+                }
             }
             1 => {
-                //bit
+                let r = R::from_u8(z).unwrap();
+                self.bit_8_r(y, r);
             }
             2 => {
-                //res
+                let r = R::from_u8(z).unwrap();
+                self.res_8_r(y, r);
             }
             4 => {
-                //set
+                let r = R::from_u8(z).unwrap();
+                self.set_8_r(y, r);
             }
             _ => panic!("unknown prefixed type  x: {:X}", x),
         }
@@ -807,7 +818,7 @@ impl Cpu {
             R::D => self.registers.get_d(),
             R::E => self.registers.get_e(),
             R::H => self.registers.get_h(),
-            R::Hl => self.registers.get_hl(),
+            R::Hl => self.registers.get_hl(&self.bus),
             R::L => self.registers.get_l(),
             R::A => self.registers.get_a(),
         };
@@ -830,7 +841,7 @@ impl Cpu {
 
     fn add_a_r(&mut self, r: R) {
         let left = self.registers.a;
-        let right = self.registers.get_r(r);
+        let right = self.registers.get_r(&self.bus, r);
         let result = left.wrapping_add(right);
 
         self.registers.a = result;
@@ -844,7 +855,7 @@ impl Cpu {
 
     fn adc_a_r(&mut self, r: R) {
         let c = self.flag_registers.c as u8;
-        let right = self.registers.get_r(r);
+        let right = self.registers.get_r(&self.bus, r);
         let left = self.registers.a;
         let result1 = left.wrapping_add(right);
         let result2 = result1.wrapping_add(c);
@@ -878,7 +889,7 @@ impl Cpu {
 
     fn sub_a_r(&mut self, r: R) {
         let left = self.registers.a;
-        let right = self.registers.get_r(r);
+        let right = self.registers.get_r(&self.bus, r);
         let result = left.wrapping_sub(right);
 
         self.registers.a = result;
@@ -892,7 +903,7 @@ impl Cpu {
 
     fn xor_a_r(&mut self, r: R) {
         let left = self.registers.a;
-        let right = self.registers.get_r(r);
+        let right = self.registers.get_r(&self.bus, r);
         let result = left & right;
 
         self.registers.a = result;
@@ -905,7 +916,7 @@ impl Cpu {
 
     fn and_a_r(&mut self, r: R) {
         let left = self.registers.a;
-        let right = self.registers.get_r(r);
+        let right = self.registers.get_r(&self.bus, r);
         let result = left & right;
 
         self.registers.a = result;
@@ -918,7 +929,7 @@ impl Cpu {
 
     fn or_a_r(&mut self, r: R) {
         let left = self.registers.a;
-        let right = self.registers.get_r(r);
+        let right = self.registers.get_r(&self.bus, r);
         let result = left | right;
 
         self.registers.a = result;
@@ -931,7 +942,7 @@ impl Cpu {
 
     fn cp_a_r(&mut self, r: R) {
         let left = self.registers.a;
-        let right = self.registers.get_r(r);
+        let right = self.registers.get_r(&self.bus, r);
         let result = left.wrapping_sub(right);
 
         self.flag_registers.set_z(result == 0);
@@ -1173,6 +1184,137 @@ impl Cpu {
         self.flag_registers.set_c(self.carry_negative(left, right));
     }
 
+    fn rlc_r(&mut self, r: R) {
+        let val = self.registers.get_r(&self.bus, r);
+        let c = (val >> 7) & 1;
+        let result = val.rotate_left(1);
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(false);
+        self.flag_registers.set_c(c == 1);
+    }
+
+    fn rrc_r(&mut self, r: R) {
+        let val = self.registers.get_r(&self.bus, r);
+        let c = val & 1;
+        let result = val.rotate_right(1);
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(false);
+        self.flag_registers.set_c(c == 1);
+    }
+
+    fn rl_r(&mut self, r: R) {
+        let val = self.registers.get_r(&self.bus, r);
+        let c = (val >> 7) & 1;
+        let result = val << 1 | self.flag_registers.c as u8;
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(false);
+        self.flag_registers.set_c(c == 1);
+    }
+
+    fn rr_r(&mut self, r: R) {
+        let val = self.registers.get_r(&self.bus, r);
+        let c = val & 1;
+        let result = val >> 1 | ((self.flag_registers.c as u8) << 7);
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(false);
+        self.flag_registers.set_c(c == 1);
+    }
+
+    fn sla_r(&mut self, r: R) {
+        let val = self.registers.get_r(&self.bus, r);
+        let c = (val >> 7) & 1;
+        let result = val << 1;
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(false);
+        self.flag_registers.set_c(c == 1);
+    }
+
+    fn sra_r(&mut self, r: R) {
+        let val = self.registers.get_r(&self.bus, r);
+        let c = val & 1;
+        let result = val >> 1 | (val & 0b10000000);
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(false);
+        self.flag_registers.set_c(c == 1);
+    }
+
+    fn swap_r(&mut self, r: R) {
+        let val = self.registers.get_r(&self.bus, r);
+        let high = val & 0xF0;
+        let low = val & 0x0F;
+        let result = (high >> 4) | (low << 4);
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(false);
+        self.flag_registers.set_c(false);
+    }
+
+    fn srl_r(&mut self, r: R) {
+        let val = self.registers.get_r(&self.bus, r);
+        let c = val & 1;
+        let result = val >> 1;
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(false);
+        self.flag_registers.set_c(c == 1);
+    }
+
+    fn bit_8_r(&mut self, bit: u8, r: R) {
+        let left = self.registers.get_r(&self.bus, r);
+        let right = bit;
+        let result = (left >> right) & 1;
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers.set_h(true);
+    }
+
+    fn res_8_r(&mut self, bit: u8, r: R) {
+        let left = self.registers.get_r(&self.bus, r);
+        let right = bit;
+        let result = left & !(1 << right);
+
+        self.set_r(r, result);
+    }
+
+    fn set_8_r(&mut self, bit: u8, r: R) {
+        let left = self.registers.get_r(&self.bus, r);
+        let right = bit;
+        let result = left | (1 << right);
+
+        self.set_r(r, result);
+    }
+
     fn rst(&mut self, addr: u8) {
         self.registers.sp = self.registers.sp.wrapping_sub(2);
         self.bus.write_word(self.registers.sp, self.registers.pc);
@@ -1214,5 +1356,18 @@ impl Cpu {
         self.registers.sp = self.registers.sp.wrapping_sub(2);
         self.bus.write_word(self.registers.sp, self.registers.pc);
         self.registers.pc = addr;
+    }
+
+    fn set_r(&mut self, r: R, val: u8) {
+        match r {
+            R::B => self.registers.set_b(val),
+            R::C => self.registers.set_c(val),
+            R::D => self.registers.set_d(val),
+            R::E => self.registers.set_e(val),
+            R::H => self.registers.set_h(val),
+            R::Hl => self.bus.write_byte(self.registers.hl, val),
+            R::L => self.registers.set_l(val),
+            R::A => self.registers.set_a(self.registers.a),
+        }
     }
 }
