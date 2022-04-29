@@ -674,29 +674,29 @@ impl Cpu {
     }
 
     fn inc_r(&mut self, r: R) {
-        match r {
-            R::B => self.registers.set_b(self.registers.get_b().wrapping_add(1)),
-            R::C => self.registers.set_c(self.registers.get_c().wrapping_add(1)),
-            R::D => self.registers.set_d(self.registers.get_d().wrapping_add(1)),
-            R::E => self.registers.set_e(self.registers.get_e().wrapping_add(1)),
-            R::H => self.registers.set_h(self.registers.get_h().wrapping_add(1)),
-            R::Hl => self.registers.set_hl(self.registers.hl.wrapping_add(1)),
-            R::L => self.registers.set_l(self.registers.get_l().wrapping_add(1)),
-            R::A => self.registers.set_a(self.registers.a.wrapping_add(1)),
-        }
+        let left = self.registers.get_r(&self.bus, r);
+        let right = 1;
+        let result = left.wrapping_add(right);
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(false);
+        self.flag_registers
+            .set_h(self.half_carry_positive(left, right));
     }
 
     fn dec_r(&mut self, r: R) {
-        match r {
-            R::B => self.registers.set_b(self.registers.get_b().wrapping_sub(1)),
-            R::C => self.registers.set_c(self.registers.get_c().wrapping_sub(1)),
-            R::D => self.registers.set_d(self.registers.get_d().wrapping_sub(1)),
-            R::E => self.registers.set_e(self.registers.get_e().wrapping_sub(1)),
-            R::H => self.registers.set_h(self.registers.get_h().wrapping_sub(1)),
-            R::Hl => self.registers.set_hl(self.registers.hl.wrapping_sub(1)),
-            R::L => self.registers.set_l(self.registers.get_l().wrapping_sub(1)),
-            R::A => self.registers.set_a(self.registers.a.wrapping_sub(1)),
-        }
+        let left = self.registers.get_r(&self.bus, r);
+        let right = 1;
+        let result = left.wrapping_sub(right);
+
+        self.set_r(r, result);
+
+        self.flag_registers.set_z(result == 0);
+        self.flag_registers.set_n(true);
+        self.flag_registers
+            .set_h(self.half_carry_negative(left, right));
     }
 
     fn ld_r_n(&mut self, r: R) {
