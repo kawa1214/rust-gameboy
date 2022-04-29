@@ -6,6 +6,19 @@ fn main() {
     for _ in 0..5 {
         gb.step();
     }
+
+    /*
+    // Bit in opcode
+    let test = 0xEC as u8; // 11101100
+
+    let x = test >> 6; //11
+    let y = test << 2 >> 5; // 101
+    let z = test << 5 >> 5; // 100
+    let p = y >> 1; // 10
+    let q = y << 2 >> 4; //1
+
+    println!("x: {:b}, y: {:b}, z: {:b}, p: {:b}, q: {:b}", x, y, z, p, q);
+    */
 }
 
 #[allow(dead_code)]

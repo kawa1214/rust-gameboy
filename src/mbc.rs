@@ -26,15 +26,11 @@ pub fn new_mbc(rom: Rom) -> Box<dyn Mbc> {
 /// using a discrete logic decoder in place of a full MBC chip
 pub struct RomOnly {
     rom: Rom,
-    ram: [u8; 8 * KB],
 }
 
 impl RomOnly {
     pub fn new(rom: Rom) -> RomOnly {
-        return RomOnly {
-            rom,
-            ram: [0; 8 * KB],
-        };
+        return RomOnly { rom };
     }
 }
 
@@ -83,6 +79,13 @@ impl Mbc for Mbc1 {
 
     #[allow(unused_variables)]
     fn write(&mut self, addr: u16, val: u8) -> () {
+        if addr <= 0x7FFF {
+            panic!("Mbc1::write invalid");
+        }
+        if addr > 0xBFFF {
+            panic!("Mbc1::write invalid");
+        }
+        self.ram[addr as usize] = val;
         panic!("RomOnly::write invalid");
     }
 }
